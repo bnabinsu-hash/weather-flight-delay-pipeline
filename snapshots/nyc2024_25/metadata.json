@@ -1,0 +1,40 @@
+{
+  "fetched_at": "2026-11-22T02:45:28+00:00",
+  "airports": [
+    "EWR",
+    "JFK",
+    "LGA"
+  ],
+  "months": [
+    "2024-01",
+    "2024-02",
+    "2024-03",
+    "2024-04",
+    "2024-05",
+    "2024-06",
+    "2024-07",
+    "2024-08",
+    "2024-09",
+    "2024-10",
+    "2024-11",
+    "2024-12",
+    "2025-01",
+    "2025-02",
+    "2025-03",
+    "2025-04",
+    "2025-05",
+    "2025-06",
+    "2025-07",
+    "2025-08",
+    "2025-09",
+    "2025-10",
+    "2025-11",
+    "2025-12"
+  ],
+  "flights": 775530,
+  "weather_hours": 52578,
+  "sources": {
+    "flights": "https://transtats.bts.gov/PREZIP/On_Time_Reporting_Carrier_On_Time_Performance_1987_present_{year}_{month}.zip",
+    "weather": "https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py"
+  }
+}
