@@ -8,8 +8,10 @@ hourly weather observations at those three airports from NOAA.
 Raw files are written as Parquet, unchanged except for an `_extracted_at`
 audit column, so every later step can be re-run without re-downloading.
 """
+import importlib.util
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 
@@ -18,10 +20,24 @@ from pipeline.config import RAW, SOURCE_TABLES
 log = logging.getLogger(__name__)
 
 
-def fetch_source(table: str) -> pd.DataFrame:
-    import nycflights13  # imported here so tests don't need the source package
+def source_dir() -> Path:
+    """Locate the CSV files bundled with the nycflights13 package.
 
-    return getattr(nycflights13, table).copy()
+    The package's own __init__ imports `pkg_resources`, which newer Python
+    environments no longer ship, so we find its data folder without importing it.
+    """
+    spec = importlib.util.find_spec("nycflights13")
+    if spec is None or not spec.submodule_search_locations:
+        raise RuntimeError("nycflights13 is not installed - run: pip install -r requirements.txt")
+    return Path(spec.submodule_search_locations[0]) / "data"
+
+
+def fetch_source(table: str) -> pd.DataFrame:
+    folder = source_dir()
+    path = folder / f"{table}.csv.zip"
+    if not path.exists():
+        path = folder / f"{table}.csv"
+    return pd.read_csv(path)
 
 
 def run() -> dict[str, int]:
