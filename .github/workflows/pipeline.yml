@@ -1,0 +1,42 @@
+name: pipeline
+
+# Runs the tests and the full pipeline on every push, and every Monday.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  test-and-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Unit tests
+        run: python -m pytest -q
+
+      - name: Run pipeline (extract -> transform -> quality -> load)
+        run: python -m pipeline.run
+
+      - name: Build charts
+        run: python -m analysis.make_charts
+
+      - name: Upload warehouse + charts
+        uses: actions/upload-artifact@v4
+        with:
+          name: warehouse
+          path: |
+            data/warehouse.duckdb
+            images/
+          retention-days: 7

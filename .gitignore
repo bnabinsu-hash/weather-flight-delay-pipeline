@@ -1,0 +1,14 @@
+# Pipeline output - rebuild with: python -m pipeline.run
+data/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.DS_Store
+Thumbs.db
