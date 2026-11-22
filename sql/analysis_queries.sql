@@ -1,7 +1,8 @@
--- Business questions answered against data/warehouse.duckdb
--- Run in the DuckDB CLI:   duckdb data/warehouse.duckdb < sql/analysis_queries.sql
+-- Business questions answered against a dataset's warehouse
+-- Run in the DuckDB CLI:   duckdb data/nyc2024_25/warehouse.duckdb < sql/analysis_queries.sql
+--                    or:  duckdb data/nyc2013/warehouse.duckdb < sql/analysis_queries.sql
 
--- Q1. Headline numbers for 2013
+-- Q1. Headline numbers
 SELECT
     COUNT(*)                                        AS flights,
     ROUND(100.0 * AVG(is_delayed::INT), 1)          AS delay_rate_pct,
@@ -61,6 +62,7 @@ ORDER BY increase_pts DESC;
 
 -- Q5. Month by month: delays vs share of flights in bad weather
 SELECT
+    d.year,
     d.month,
     d.month_name,
     COUNT(*)                                                        AS flights,
@@ -69,8 +71,8 @@ SELECT
                                                                     AS pct_in_bad_weather
 FROM fact_flights f
 JOIN dim_date d USING (date_key)
-GROUP BY d.month, d.month_name
-ORDER BY d.month;
+GROUP BY d.year, d.month, d.month_name
+ORDER BY d.year, d.month;
 
 -- Q6. Delays build up through the day
 SELECT sched_dep_hour, flights, delay_rate_pct, avg_dep_delay_min
@@ -104,3 +106,30 @@ FROM mart_daily_airport
 GROUP BY date_key
 ORDER BY delay_rate_pct DESC
 LIMIT 10;
+
+-- Q9. Official BTS delay causes - share of all delay minutes (2024-25 data only)
+SELECT
+    ROUND(100 * SUM(late_aircraft_delay_min) / total, 1) AS late_aircraft_pct,
+    ROUND(100 * SUM(carrier_delay_min)       / total, 1) AS carrier_pct,
+    ROUND(100 * SUM(nas_delay_min)           / total, 1) AS air_traffic_system_pct,
+    ROUND(100 * SUM(weather_delay_min)       / total, 1) AS extreme_weather_pct,
+    ROUND(100 * SUM(security_delay_min)      / total, 1) AS security_pct
+FROM fact_flights,
+     (SELECT SUM(COALESCE(late_aircraft_delay_min, 0) + COALESCE(carrier_delay_min, 0)
+               + COALESCE(nas_delay_min, 0) + COALESCE(weather_delay_min, 0)
+               + COALESCE(security_delay_min, 0)) AS total
+      FROM fact_flights)
+GROUP BY total;
+
+-- Q10. Cancellations by official cause code (2024-25 data only)
+SELECT
+    CASE cancellation_code
+        WHEN 'A' THEN 'Airline' WHEN 'B' THEN 'Weather'
+        WHEN 'C' THEN 'Air traffic system' WHEN 'D' THEN 'Security'
+    END                                                  AS cause,
+    COUNT(*)                                             AS cancellations,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 1)   AS pct
+FROM fact_flights
+WHERE is_cancelled AND cancellation_code IS NOT NULL
+GROUP BY cause
+ORDER BY cancellations DESC;

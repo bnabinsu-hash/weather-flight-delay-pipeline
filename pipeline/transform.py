@@ -35,7 +35,10 @@ def clean_weather(weather: pd.DataFrame) -> pd.DataFrame:
         log.info("nulled %d impossible wind_speed readings", int(bad_wind.sum()))
     w.loc[bad_wind, "wind_speed"] = np.nan
 
+    # "Trace" precipitation is stored as 0.0001 in in the IEM feed but as 0 in
+    # nycflights13. Treat anything under the 0.01 in reporting unit as none.
     w["precip"] = w["precip"].fillna(0.0)
+    w.loc[w["precip"] < c.MEASURABLE_PRECIP_IN, "precip"] = 0.0
     w = w.drop_duplicates(subset=["origin", "time_hour"])
     w["weather_condition"] = classify_condition(w)
     return w
@@ -59,8 +62,22 @@ def classify_condition(w: pd.DataFrame) -> pd.Series:
     )
 
 
+# Official BTS delay-cause minutes - present in the 2024-25 data, absent in nycflights13
+OPTIONAL_FLIGHT_COLS = [
+    "carrier_delay", "weather_delay", "nas_delay", "security_delay",
+    "late_aircraft_delay", "cancellation_code", "diverted",
+]
+
+
 def clean_flights(flights: pd.DataFrame) -> pd.DataFrame:
-    f = flights.drop(columns=["_extracted_at"], errors="ignore").copy()
+    f = flights.drop(columns=["_extracted_at", "cancelled"], errors="ignore").copy()
+    for col in OPTIONAL_FLIGHT_COLS:
+        if col not in f.columns:
+            f[col] = pd.NA
+    f["cancellation_code"] = f["cancellation_code"].astype("string")
+    for col in OPTIONAL_FLIGHT_COLS:
+        if col != "cancellation_code":
+            f[col] = pd.to_numeric(f[col], errors="coerce")
     f["flight_date"] = pd.to_datetime(f[["year", "month", "day"]]).dt.date
     f["is_cancelled"] = f["dep_time"].isna()
     f["is_delayed"] = (f["dep_delay"] >= c.DELAY_THRESHOLD_MIN) & ~f["is_cancelled"]

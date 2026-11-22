@@ -1,15 +1,18 @@
 """
-Build the README charts from the warehouse.
+Build the README charts from a dataset's warehouse.
 
-    python -m analysis.make_charts
+    python -m analysis.make_charts                       # nyc2013
+    python -m analysis.make_charts --dataset nyc2024_25  # files prefixed nyc2024_25_
 """
+import argparse
+import os
 import duckdb
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-from pipeline.config import IMAGES, WAREHOUSE  # noqa: E402
+from pipeline import config  # noqa: E402
 
 CLEAR = "#2a78d6"      # series 1: clear weather
 BAD = "#eb6834"        # series 2: bad weather
@@ -29,9 +32,13 @@ plt.rcParams.update({
 BAD_WEATHER = "weather_condition NOT IN ('Clear', 'Unknown')"
 
 
+PREFIX = ""
+
+
 def save(fig, name):
+    name = PREFIX + name
     fig.tight_layout()
-    fig.savefig(IMAGES / name, dpi=150)
+    fig.savefig(config.IMAGES / name, dpi=150)
     plt.close(fig)
     print(f"saved images/{name}")
 
@@ -119,9 +126,11 @@ def monthly(con):
     save(fig, "delay_by_month.png")
 
 
-def main():
-    IMAGES.mkdir(exist_ok=True)
-    con = duckdb.connect(str(WAREHOUSE), read_only=True)
+def main(dataset: str = config.DEFAULT_DATASET):
+    global PREFIX
+    PREFIX = "" if dataset == config.DEFAULT_DATASET else f"{dataset}_"
+    config.IMAGES.mkdir(exist_ok=True)
+    con = duckdb.connect(str(config.warehouse_path(dataset)), read_only=True)
     try:
         delay_by_condition(con)
         delay_by_hour(con)
@@ -132,4 +141,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", default=os.environ.get("PIPELINE_DATASET", config.DEFAULT_DATASET),
+                        choices=list(config.DATASETS))
+    main(parser.parse_args().dataset)

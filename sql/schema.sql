@@ -17,7 +17,7 @@ FROM read_parquet('{raw}/airlines.parquet');
 
 CREATE TABLE dim_date AS
 SELECT
-    d::DATE                         AS date_key,
+    d                               AS date_key,
     EXTRACT(year FROM d)::INT       AS year,
     EXTRACT(month FROM d)::INT      AS month,
     strftime(d, '%b')               AS month_name,
@@ -31,7 +31,10 @@ SELECT
         WHEN EXTRACT(month FROM d) IN (6, 7, 8)  THEN 'Summer'
         ELSE 'Fall'
     END                             AS season
-FROM generate_series(DATE '2013-01-01', DATE '2013-12-31', INTERVAL 1 DAY) AS t(d);
+FROM (
+    SELECT UNNEST(generate_series(MIN(flight_date)::DATE, MAX(flight_date)::DATE, INTERVAL 1 DAY))::DATE AS d
+    FROM read_parquet('{staging}/flights_weather.parquet')
+);
 
 CREATE TABLE dim_weather_hour AS
 SELECT
@@ -68,5 +71,13 @@ SELECT
     distance                                AS distance_mi,
     is_cancelled,
     is_delayed,
-    weather_condition
+    weather_condition,
+    -- official BTS delay causes (minutes; NULL in the 2013 data)
+    cancellation_code,
+    diverted::INT                           AS is_diverted,
+    carrier_delay                           AS carrier_delay_min,
+    weather_delay                           AS weather_delay_min,
+    nas_delay                               AS nas_delay_min,
+    security_delay                          AS security_delay_min,
+    late_aircraft_delay                     AS late_aircraft_delay_min
 FROM read_parquet('{staging}/flights_weather.parquet');

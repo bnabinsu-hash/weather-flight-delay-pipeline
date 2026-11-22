@@ -26,17 +26,26 @@ jobs:
       - name: Unit tests
         run: python -m pytest -q
 
-      - name: Run pipeline (extract -> transform -> quality -> load)
-        run: python -m pipeline.run
+      - name: Run pipeline - 2013 (extract -> transform -> quality -> load)
+        run: python -m pipeline.run --dataset nyc2013
+
+      - name: Run pipeline - 2024-2025 snapshot
+        if: hashFiles('snapshots/nyc2024_25/flights.parquet') != ''
+        run: python -m pipeline.run --dataset nyc2024_25
 
       - name: Build charts
-        run: python -m analysis.make_charts
+        run: |
+          python -m analysis.make_charts --dataset nyc2013
+          if [ -f data/nyc2024_25/warehouse.duckdb ]; then
+            python -m analysis.make_charts --dataset nyc2024_25
+            python -m analysis.compare_periods
+          fi
 
       - name: Upload warehouse + charts
         uses: actions/upload-artifact@v4
         with:
           name: warehouse
           path: |
-            data/warehouse.duckdb
+            data/*/warehouse.duckdb
             images/
           retention-days: 7

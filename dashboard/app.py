@@ -5,6 +5,7 @@ Interactive dashboard for the flight delay warehouse.
 
 Builds the warehouse first if it doesn't exist yet (e.g. on Streamlit Cloud).
 """
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,15 +22,20 @@ st.set_page_config(page_title="NYC Flight Delays & Weather", page_icon="✈️",
 
 
 @st.cache_resource
-def get_connection():
-    if not config.WAREHOUSE.exists():
-        with st.spinner("Building the warehouse (first run only)..."):
-            from pipeline import run
-            run.main()
-    return duckdb.connect(str(config.WAREHOUSE), read_only=True)
+def get_connection(dataset: str):
+    path = config.warehouse_path(dataset)
+    if not path.exists():
+        with st.spinner(f"Building the {config.DATASETS[dataset]} warehouse (first run only)..."):
+            subprocess.run([sys.executable, "-m", "pipeline.run", "--dataset", dataset],
+                           cwd=ROOT, check=True)
+    return duckdb.connect(str(path), read_only=True)
 
 
-con = get_connection()
+available = [d for d in config.DATASETS
+             if d == "nyc2013" or (config.SNAPSHOTS / d / "flights.parquet").exists()]
+dataset = st.sidebar.radio("Dataset", available, index=len(available) - 1,
+                           format_func=lambda d: config.DATASETS[d])
+con = get_connection(dataset)
 
 
 def q(sql: str, params=None) -> pd.DataFrame:
@@ -37,18 +43,24 @@ def q(sql: str, params=None) -> pd.DataFrame:
 
 
 st.title("✈️ How weather delays NYC flights")
-st.caption("336,776 flights from EWR, JFK and LGA in 2013, matched to hourly airport weather.")
+n_flights, first, last = con.execute(
+    "SELECT COUNT(*), MIN(date_key), MAX(date_key) FROM fact_flights").fetchone()
+st.caption(f"{n_flights:,} flights from EWR, JFK and LGA ({first:%b %Y} - {last:%b %Y}), "
+           "each matched to the weather at its airport during its departure hour.")
 
 # ---------- filters ----------
-c1, c2 = st.columns(2)
+all_years = [r[0] for r in con.execute("SELECT DISTINCT year FROM dim_date ORDER BY year").fetchall()]
+c1, c2, c3 = st.columns([2, 1, 2])
 airports = c1.multiselect("Airport", ["EWR", "JFK", "LGA"], default=["EWR", "JFK", "LGA"])
-months = c2.slider("Months", 1, 12, (1, 12))
-if not airports:
-    st.warning("Pick at least one airport.")
+years = c2.multiselect("Year", all_years, default=all_years)
+months = c3.slider("Months", 1, 12, (1, 12))
+if not airports or not years:
+    st.warning("Pick at least one airport and one year.")
     st.stop()
 
-where = "f.origin_code IN (SELECT UNNEST(?)) AND d.month BETWEEN ? AND ?"
-params = [airports, months[0], months[1]]
+where = ("f.origin_code IN (SELECT UNNEST(?)) AND d.year IN (SELECT UNNEST(?)) "
+         "AND d.month BETWEEN ? AND ?")
+params = [airports, years, months[0], months[1]]
 base = f"FROM fact_flights f JOIN dim_date d USING (date_key) WHERE {where}"
 
 # ---------- KPIs ----------

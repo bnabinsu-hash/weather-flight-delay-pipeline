@@ -79,3 +79,23 @@ def test_quality_checks_catch_lost_rows():
     joined = join_flights_weather(flights, weather)
     results = dict(quality.checks(joined, source_rows=len(joined) + 1))
     assert results["no flights lost or duplicated in the join"] is False
+
+
+def test_clean_flights_adds_missing_delay_cause_columns():
+    out = clean_flights(flights_df())
+    for col in ["weather_delay", "nas_delay", "late_aircraft_delay", "cancellation_code"]:
+        assert col in out.columns
+        assert out[col].isna().all()
+
+
+def test_clean_flights_keeps_delay_causes_when_present():
+    df = flights_df().assign(weather_delay=[0.0, np.nan, 30.0], cancellation_code=[None, "B", None])
+    out = clean_flights(df)
+    assert out["weather_delay"].tolist()[2] == 30.0
+    assert out["cancellation_code"].tolist()[1] == "B"
+
+
+def test_trace_precipitation_counts_as_none():
+    out = clean_weather(pd.DataFrame([weather_row(precip=0.0001)]))
+    assert out["precip"].iloc[0] == 0
+    assert out["weather_condition"].iloc[0] == "Clear"
